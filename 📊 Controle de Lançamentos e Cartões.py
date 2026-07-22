@@ -18,12 +18,12 @@ def conectar_google_sheets():
         planilha = client.open_by_url(st.secrets["url_planilha"])
         return planilha
     except Exception as e:
-        return None
+        return f"{type(e).__name__}: {str(e)}" 
 
 planilha = conectar_google_sheets()
 
-if planilha is None:
-    st.error("⚠️ Não foi possível conectar ao Google Sheets. Verifique o arquivo .streamlit/secrets.toml e o compartilhamento da planilha.")
+if isinstance(planilha, str):
+    st.error(f"⚠️ Erro real do Google: {planilha}")
     st.stop()
 
 # --- 2. GESTÃO DE CLIENTES (ABAS) ---
@@ -43,20 +43,17 @@ dados_brutos = aba_atual.get_all_values()
 cabecalhos_lanc = ['Data', 'Tipo', 'Categoria', 'Conta/Banco', 'Método de Pagamento', 'Valor', 'Descrição', 'Status']
 cabecalhos_cart = ['Data da Compra', 'Cartão', 'Valor Total', 'Categoria', 'Parcelas', 'Descrição', 'Valor da Parcela', 'Parcela Atual', 'Data de Vencimento', 'Status']
 
-# Se a aba estiver vazia, cria a estrutura automaticamente (Lançamentos na coluna A, Cartões na J)
 if not dados_brutos:
     aba_atual.update(range_name='A1', values=[cabecalhos_lanc])
     aba_atual.update(range_name='J1', values=[cabecalhos_cart])
     dados_brutos = aba_atual.get_all_values()
 
-# Separar os dados lidos (A:H para Lançamentos, J:S para Cartões)
 linhas_lanc = [linha[:8] for linha in dados_brutos[1:] if len(linha) >= 8 and linha[0] != ""]
 linhas_cart = [linha[9:19] for linha in dados_brutos[1:] if len(linha) >= 19 and linha[9] != ""]
 
 df_lanc = pd.DataFrame(linhas_lanc, columns=cabecalhos_lanc)
 df_cart = pd.DataFrame(linhas_cart, columns=cabecalhos_cart)
 
-# Converter colunas financeiras e de data para os tipos corretos
 if not df_lanc.empty:
     df_lanc['Data'] = pd.to_datetime(df_lanc['Data'], format="%d/%m/%Y", errors='coerce')
     df_lanc['Valor'] = pd.to_numeric(df_lanc['Valor'], errors='coerce')
@@ -69,7 +66,6 @@ if not df_cart.empty:
     df_cart['Parcelas'] = pd.to_numeric(df_cart['Parcelas'], errors='coerce')
     df_cart['Parcela Atual'] = pd.to_numeric(df_cart['Parcela Atual'], errors='coerce')
 
-# Salvar na memória do Streamlit para as outras páginas usarem
 st.session_state.lancamentos = df_lanc
 st.session_state.cartoes = df_cart
 if 'vencimentos_cartoes' not in st.session_state:
@@ -77,42 +73,26 @@ if 'vencimentos_cartoes' not in st.session_state:
 
 def salvar_no_sheets():
     """Função para reescrever os dados atualizados na aba do cliente"""
-    # ==========================================
-    # 1. PREPARAÇÃO DOS LANÇAMENTOS GERAIS
-    # ==========================================
+    # Prepara Lançamentos
     df_l = st.session_state.lancamentos.copy()
     if not df_l.empty:
-        # Formata as datas
         df_l['Data'] = pd.to_datetime(df_l['Data'], errors='coerce') 
         df_l['Data'] = df_l['Data'].dt.strftime('%d/%m/%Y')
     
-    # A SOLUÇÃO: Substitui qualquer tipo de vazio (NaN, None, NaT, pd.NA) por texto em branco ("")
-    # em TODAS as colunas da tabela de uma só vez. Isso impede o erro de JSON.
     df_l = df_l.fillna("")
-    
     valores_l = [cabecalhos_lanc] + df_l.values.tolist()
     
-    # ==========================================
-    # 2. PREPARAÇÃO DOS CARTÕES
-    # ==========================================
+    # Prepara Cartões
     df_c = st.session_state.cartoes.copy()
     if not df_c.empty:
-        # Formata as datas
         df_c['Data da Compra'] = pd.to_datetime(df_c['Data da Compra'], errors='coerce')
         df_c['Data de Vencimento'] = pd.to_datetime(df_c['Data de Vencimento'], errors='coerce')
-        
         df_c['Data da Compra'] = df_c['Data da Compra'].dt.strftime('%d/%m/%Y')
         df_c['Data de Vencimento'] = df_c['Data de Vencimento'].dt.strftime('%d/%m/%Y')
     
-    # A SOLUÇÃO APLICADA AOS CARTÕES
     df_c = df_c.fillna("")
-    
     valores_c = [cabecalhos_cart] + df_c.values.tolist()
     
-    # ==========================================
-    # 3. ENVIO PARA O GOOGLE SHEETS
-    # ==========================================
-    # Limpa a aba e reescreve 
     aba_atual.clear()
     aba_atual.update(range_name='A1', values=valores_l)
     aba_atual.update(range_name='J1', values=valores_c)
@@ -132,14 +112,19 @@ with aba1:
     data_lanc = st.date_input("Data", date.today(), format="DD/MM/YYYY")
     tipo = st.selectbox("Tipo", ["Receita", "Despesa"])
     
-    opcoes_categoria = ["Salário", "Rendimentos financeiros", "Outros"] if tipo == "Receita" else ["Moradia", "Alimentação", "Transporte", "Saúde", "Outros"]
-    opcoes_status = ["Recebido", "A Receber"] if tipo == "Receita" else ["Pago", "A Pagar"]
+    # RESTAURANDO TODAS AS OPÇÕES ORIGINAIS
+    if tipo == "Receita":
+        opcoes_categoria = ["Salário", "Rendimentos financeiros", "Pró-labore", "Empréstimo recebido", "Outros"]
+        opcoes_status = ["Recebido", "A Receber"]
+    else:
+        opcoes_categoria = ["Moradia", "Alimentação", "Transporte", "Lazer", "Saúde", "Seguro", "Impostos e taxas", "Outros"]
+        opcoes_status = ["Pago", "A Pagar"]
         
     categoria = st.selectbox("Categoria", opcoes_categoria)
     conta = st.selectbox("Conta/Banco", ["Banco do Brasil", "Santander", "Nubank", "Inter", "Dinheiro Físico"])
     metodo_pagamento = st.selectbox("Método de Pagamento", ["Pix", "Débito", "Boleto"])
     valor = st.number_input("Valor (R$)", min_value=0.01, format="%.2f")
-    descricao = st.text_input("Descrição")
+    descricao = st.text_input("Descrição (Ex: Salário, Conta de Luz)")
     status = st.radio("Status", opcoes_status, horizontal=True)
         
     if st.button("Salvar Lançamento no Sistema"):
@@ -155,6 +140,8 @@ with aba1:
         st.rerun()
 
     st.subheader("Histórico (Sincronizado)")
+    st.markdown("💡 **Dica:** Dê um duplo clique na coluna **Status** para alterar. As mudanças são salvas na nuvem automaticamente.")
+    
     df_lanc_editado = st.data_editor(
         st.session_state.lancamentos, use_container_width=True, hide_index=True, num_rows="dynamic", 
         column_config={
@@ -170,13 +157,40 @@ with aba1:
 
 with aba2:
     st.header(f"Lançamento de Cartão - {cliente_selecionado}")
+    
+    with st.expander("⚙️ Configurar Dias de Vencimento dos Cartões"):
+        cols_venc = st.columns(4)
+        lista_cartoes = list(st.session_state.vencimentos_cartoes.keys())
+        for i, cartao in enumerate(lista_cartoes):
+            with cols_venc[i]:
+                dia_atual_cfg = st.session_state.vencimentos_cartoes[cartao]
+                novo_dia_cfg = st.number_input(f"Venc. {cartao}", min_value=1, max_value=31, value=dia_atual_cfg, key=f"cfg_{cartao}")
+                if novo_dia_cfg != dia_atual_cfg:
+                    st.session_state.vencimentos_cartoes[cartao] = novo_dia_cfg
+                    if not st.session_state.cartoes.empty:
+                        def atualizar_linha_vencimento(row):
+                            if row['Cartão'] == cartao and row['Status'] == 'A Pagar':
+                                d_compra = pd.to_datetime(row['Data da Compra']).date()
+                                p_num = int(row['Parcela Atual'])
+                                nova_dt = calcular_data_vencimento(d_compra, p_num, novo_dia_cfg)
+                                return pd.to_datetime(nova_dt)
+                            return row['Data de Vencimento']
+                        st.session_state.cartoes['Data de Vencimento'] = st.session_state.cartoes.apply(atualizar_linha_vencimento, axis=1)
+                        salvar_no_sheets() # Salva a nova configuração de datas na nuvem
+                        st.toast(f"Datas de vencimento do {cartao} reajustadas na nuvem!", icon="🔄")
+                        st.rerun()
+                        
+    st.markdown("---")
+
     with st.form(key="form_cartoes", clear_on_submit=True):
         data_compra = st.date_input("Data da Compra", date.today(), format="DD/MM/YYYY")
         nome_cartao = st.selectbox("Cartão", ["Cartão Nubank", "Cartão Santander", "Cartão BB", "Cartão Inter"])
-        tipo_valor = st.radio("Refere-se a:", ["Valor Total", "Valor da Parcela"], horizontal=True)
+        tipo_valor = st.radio("O valor informado se refere a:", ["Valor Total da Compra", "Valor da Parcela"], horizontal=True)
         valor_informado = st.number_input("Valor Informado (R$)", min_value=0.01, format="%.2f")
-        cat_cartao = st.selectbox("Categoria", ["Alimentação", "Transporte", "Saúde", "Lazer", "Outros"])
-        parcelas = st.number_input("Parcelas", min_value=1, step=1)
+        
+        # RESTAURANDO OPÇÕES COMPLETAS DO CARTÃO
+        cat_cartao = st.selectbox("Categoria da Compra", ["Alimentação", "Transporte", "Saúde", "Lazer", "Educação", "Outros"])
+        parcelas = st.number_input("Número Total de Parcelas", min_value=1, max_value=72, step=1)
         desc_cartao = st.text_input("Descrição")
             
         if st.form_submit_button("Gerar Parcelas na Nuvem"):
@@ -195,10 +209,12 @@ with aba2:
                 })
             st.session_state.cartoes = pd.concat([st.session_state.cartoes, pd.DataFrame(linhas)], ignore_index=True)
             salvar_no_sheets()
-            st.success("Parcelas sincronizadas com o Google Sheets!")
+            st.success("Compra no cartão e parcelas sincronizadas com o Google Sheets!")
             st.rerun()
 
     st.subheader("Faturas (Sincronizadas)")
+    st.markdown("💡 **Dica:** Dê um duplo clique na coluna **Status** para marcar as parcelas pagas. As mudanças são salvas na nuvem.")
+    
     df_cartoes_editado = st.data_editor(
         st.session_state.cartoes, use_container_width=True, hide_index=True, num_rows="dynamic",
         column_config={
