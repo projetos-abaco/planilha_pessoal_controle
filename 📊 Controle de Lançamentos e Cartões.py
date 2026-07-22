@@ -80,14 +80,20 @@ def salvar_no_sheets():
     # Prepara Lançamentos
     df_l = st.session_state.lancamentos.copy()
     if not df_l.empty:
-        df_l['Data'] = df_l['Data'].dt.strftime('%d/%m/%Y')
+        # Força a conversão para Data do Pandas antes de formatar
+        df_l['Data'] = pd.to_datetime(df_l['Data'], errors='coerce') 
+        df_l['Data'] = df_l['Data'].dt.strftime('%d/%m/%Y').fillna('')
     valores_l = [cabecalhos_lanc] + df_l.values.tolist()
     
     # Prepara Cartões
     df_c = st.session_state.cartoes.copy()
     if not df_c.empty:
-        df_c['Data da Compra'] = df_c['Data da Compra'].dt.strftime('%d/%m/%Y')
-        df_c['Data de Vencimento'] = df_c['Data de Vencimento'].dt.strftime('%d/%m/%Y')
+        # Força a conversão para Data do Pandas antes de formatar
+        df_c['Data da Compra'] = pd.to_datetime(df_c['Data da Compra'], errors='coerce')
+        df_c['Data de Vencimento'] = pd.to_datetime(df_c['Data de Vencimento'], errors='coerce')
+        
+        df_c['Data da Compra'] = df_c['Data da Compra'].dt.strftime('%d/%m/%Y').fillna('')
+        df_c['Data de Vencimento'] = df_c['Data de Vencimento'].dt.strftime('%d/%m/%Y').fillna('')
     valores_c = [cabecalhos_cart] + df_c.values.tolist()
     
     # Limpa a aba e reescreve para evitar linhas fantasmas
