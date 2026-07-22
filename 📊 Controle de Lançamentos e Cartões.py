@@ -26,15 +26,23 @@ if isinstance(planilha, str):
     st.error(f"⚠️ Erro real do Google: {planilha}")
     st.stop()
 
-# --- 2. GESTÃO DE CLIENTES (ABAS) ---
+# --- 2. GESTÃO DE CLIENTES NA BARRA LATERAL ---
 st.sidebar.header("👥 Seleção de Cliente")
 st.sidebar.markdown("Crie novas abas na sua planilha do Google para adicionar clientes.")
 
 abas = planilha.worksheets()
 nomes_abas = [aba.title for aba in abas]
 
-cliente_selecionado = st.sidebar.selectbox("Cliente Ativo (Aba):", nomes_abas)
-st.session_state.cliente_selecionado = cliente_selecionado # Guarda o nome para as outras abas!
+# Mantém a memória do cliente selecionado entre as páginas
+if 'cliente_selecionado' not in st.session_state or st.session_state.cliente_selecionado not in nomes_abas:
+    st.session_state.cliente_selecionado = nomes_abas[0]
+
+cliente_selecionado = st.sidebar.selectbox(
+    "Cliente Ativo (Aba):", 
+    nomes_abas, 
+    index=nomes_abas.index(st.session_state.cliente_selecionado)
+)
+st.session_state.cliente_selecionado = cliente_selecionado
 aba_atual = planilha.worksheet(cliente_selecionado)
 
 # --- 3. LEITURA DOS DADOS DA NUVEM ---
@@ -72,8 +80,6 @@ if 'vencimentos_cartoes' not in st.session_state:
     st.session_state.vencimentos_cartoes = {"Cartão Nubank": 10, "Cartão Santander": 15, "Cartão BB": 20, "Cartão Inter": 25}
 
 def salvar_no_sheets():
-    """Função para reescrever os dados atualizados na aba do cliente"""
-    # Prepara Lançamentos
     df_l = st.session_state.lancamentos.copy()
     if not df_l.empty:
         df_l['Data'] = pd.to_datetime(df_l['Data'], errors='coerce') 
@@ -82,7 +88,6 @@ def salvar_no_sheets():
     df_l = df_l.fillna("")
     valores_l = [cabecalhos_lanc] + df_l.values.tolist()
     
-    # Prepara Cartões
     df_c = st.session_state.cartoes.copy()
     if not df_c.empty:
         df_c['Data da Compra'] = pd.to_datetime(df_c['Data da Compra'], errors='coerce')
@@ -112,7 +117,6 @@ with aba1:
     data_lanc = st.date_input("Data", date.today(), format="DD/MM/YYYY")
     tipo = st.selectbox("Tipo", ["Receita", "Despesa"])
     
-    # RESTAURANDO TODAS AS OPÇÕES ORIGINAIS
     if tipo == "Receita":
         opcoes_categoria = ["Salário", "Rendimentos financeiros", "Pró-labore", "Empréstimo recebido", "Outros"]
         opcoes_status = ["Recebido", "A Receber"]
@@ -176,7 +180,7 @@ with aba2:
                                 return pd.to_datetime(nova_dt)
                             return row['Data de Vencimento']
                         st.session_state.cartoes['Data de Vencimento'] = st.session_state.cartoes.apply(atualizar_linha_vencimento, axis=1)
-                        salvar_no_sheets() # Salva a nova configuração de datas na nuvem
+                        salvar_no_sheets()
                         st.toast(f"Datas de vencimento do {cartao} reajustadas na nuvem!", icon="🔄")
                         st.rerun()
                         
@@ -187,8 +191,6 @@ with aba2:
         nome_cartao = st.selectbox("Cartão", ["Cartão Nubank", "Cartão Santander", "Cartão BB", "Cartão Inter"])
         tipo_valor = st.radio("O valor informado se refere a:", ["Valor Total da Compra", "Valor da Parcela"], horizontal=True)
         valor_informado = st.number_input("Valor Informado (R$)", min_value=0.01, format="%.2f")
-        
-        # RESTAURANDO OPÇÕES COMPLETAS DO CARTÃO
         cat_cartao = st.selectbox("Categoria da Compra", ["Alimentação", "Transporte", "Saúde", "Lazer", "Educação", "Outros"])
         parcelas = st.number_input("Número Total de Parcelas", min_value=1, max_value=72, step=1)
         desc_cartao = st.text_input("Descrição")

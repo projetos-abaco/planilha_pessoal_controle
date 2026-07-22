@@ -2,25 +2,76 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import date
+import gspread
+from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="Prova de Superendividamento", page_icon="⚖️", layout="wide")
 
-# Puxa o nome do cliente da memória
-cliente = st.session_state.get('cliente_selecionado', 'Cliente não selecionado')
-st.title(f"⚖️ Diagnóstico de Superendividamento - {cliente}")
+# --- CONEXÃO COM O GOOGLE SHEETS ---
+@st.cache_resource
+def conectar_google_sheets():
+    try:
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        credenciais = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
+        client = gspread.authorize(credenciais)
+        planilha = client.open_by_url(st.secrets["url_planilha"])
+        return planilha
+    except Exception as e:
+        return f"{type(e).__name__}: {str(e)}" 
 
+planilha = conectar_google_sheets()
+
+if isinstance(planilha, str):
+    st.error(f"⚠️ Erro real do Google: {planilha}")
+    st.stop()
+
+# --- BARRA LATERAL (SELEÇÃO DE CLIENTE) ---
+st.sidebar.header("👥 Seleção de Cliente")
+abas = planilha.worksheets()
+nomes_abas = [aba.title for aba in abas]
+
+if 'cliente_selecionado' not in st.session_state or st.session_state.cliente_selecionado not in nomes_abas:
+    st.session_state.cliente_selecionado = nomes_abas[0]
+
+cliente_selecionado = st.sidebar.selectbox(
+    "Cliente Ativo (Aba):", 
+    nomes_abas, 
+    index=nomes_abas.index(st.session_state.cliente_selecionado)
+)
+st.session_state.cliente_selecionado = cliente_selecionado
+aba_atual = planilha.worksheet(cliente_selecionado)
+
+# --- PUXA OS DADOS DO CLIENTE SELECIONADO ---
+st.title(f"⚖️ Diagnóstico de Superendividamento - {cliente_selecionado}")
+
+dados_brutos = aba_atual.get_all_values()
+cabecalhos_lanc = ['Data', 'Tipo', 'Categoria', 'Conta/Banco', 'Método de Pagamento', 'Valor', 'Descrição', 'Status']
+cabecalhos_cart = ['Data da Compra', 'Cartão', 'Valor Total', 'Categoria', 'Parcelas', 'Descrição', 'Valor da Parcela', 'Parcela Atual', 'Data de Vencimento', 'Status']
+
+linhas_lanc = [linha[:8] for linha in dados_brutos[1:] if len(linha) >= 8 and linha[0] != ""]
+linhas_cart = [linha[9:19] for linha in dados_brutos[1:] if len(linha) >= 19 and linha[9] != ""]
+
+df_lanc = pd.DataFrame(linhas_lanc, columns=cabecalhos_lanc)
+df_cart = pd.DataFrame(linhas_cart, columns=cabecalhos_cart)
+
+if not df_lanc.empty:
+    df_lanc['Data'] = pd.to_datetime(df_lanc['Data'], format="%d/%m/%Y", errors='coerce')
+    df_lanc['Valor'] = pd.to_numeric(df_lanc['Valor'], errors='coerce')
+
+if not df_cart.empty:
+    df_cart['Data da Compra'] = pd.to_datetime(df_cart['Data da Compra'], format="%d/%m/%Y", errors='coerce')
+    df_cart['Data de Vencimento'] = pd.to_datetime(df_cart['Data de Vencimento'], format="%d/%m/%Y", errors='coerce')
+    df_cart['Valor Total'] = pd.to_numeric(df_cart['Valor Total'], errors='coerce')
+    df_cart['Valor da Parcela'] = pd.to_numeric(df_cart['Valor da Parcela'], errors='coerce')
+    df_cart['Parcelas'] = pd.to_numeric(df_cart['Parcelas'], errors='coerce')
+    df_cart['Parcela Atual'] = pd.to_numeric(df_cart['Parcela Atual'], errors='coerce')
+
+# --- INÍCIO DO CÓDIGO DA PÁGINA ---
 st.markdown("""
 Esta ferramenta gera uma comprovação visual baseada na **Lei 14.181/2021**. 
 O objetivo é evidenciar a incapacidade financeira do consumidor de arcar com suas dívidas sem comprometer seu **Mínimo Existencial** (gastos fundamentais de sobrevivência).
 """)
 st.markdown("---")
-
-if 'lancamentos' not in st.session_state or 'cartoes' not in st.session_state:
-    st.warning("Nenhum dado encontrado. Retorne à página inicial para preencher as informações.")
-    st.stop()
-
-df_lanc = st.session_state.lancamentos.copy()
-df_cart = st.session_state.cartoes.copy()
 
 df_lanc['Mes_Ano'] = pd.to_datetime(df_lanc['Data']).dt.strftime('%m/%Y') if not df_lanc.empty else []
 df_cart['Mes_Ano'] = pd.to_datetime(df_cart['Data de Vencimento']).dt.strftime('%m/%Y') if not df_cart.empty else []
@@ -84,9 +135,6 @@ with col2:
 
 st.markdown("---")
 
-# -------------------------------------------------------------
-# SEÇÃO 4: SIMULADOR DE ACORDO (PLANO DE PAGAMENTO)
-# -------------------------------------------------------------
 st.subheader("🤝 Simulador de Plano de Pagamento (Art. 104-A, Lei 14.181/21)")
 st.markdown("Análise de viabilidade de repactuação da dívida global do cliente no prazo máximo de 5 anos.")
 
