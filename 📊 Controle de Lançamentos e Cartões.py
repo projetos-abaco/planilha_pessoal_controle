@@ -28,12 +28,11 @@ if isinstance(planilha, str):
 
 # --- 2. GESTÃO DE CLIENTES NA BARRA LATERAL ---
 st.sidebar.header("👥 Seleção de Cliente")
-st.sidebar.markdown("Crie novas abas na sua planilha do Google para adicionar clientes.")
+st.sidebar.markdown("Crie novas abas na sua planilha para adicionar clientes.")
 
 abas = planilha.worksheets()
 nomes_abas = [aba.title for aba in abas]
 
-# Mantém a memória do cliente selecionado entre as páginas
 if 'cliente_selecionado' not in st.session_state or st.session_state.cliente_selecionado not in nomes_abas:
     st.session_state.cliente_selecionado = nomes_abas[0]
 
@@ -45,7 +44,7 @@ cliente_selecionado = st.sidebar.selectbox(
 st.session_state.cliente_selecionado = cliente_selecionado
 aba_atual = planilha.worksheet(cliente_selecionado)
 
-# --- 3. LEITURA DOS DADOS DA NUVEM ---
+# --- 3. LEITURA PROTEGIDA DOS DADOS DA NUVEM ---
 dados_brutos = aba_atual.get_all_values()
 
 cabecalhos_lanc = ['Data', 'Tipo', 'Categoria', 'Conta/Banco', 'Método de Pagamento', 'Valor', 'Descrição', 'Status']
@@ -56,21 +55,36 @@ if not dados_brutos:
     aba_atual.update(range_name='J1', values=[cabecalhos_cart])
     dados_brutos = aba_atual.get_all_values()
 
-linhas_lanc = [linha[:8] for linha in dados_brutos[1:] if len(linha) >= 8 and linha[0] != ""]
-linhas_cart = [linha[9:19] for linha in dados_brutos[1:] if len(linha) >= 19 and linha[9] != ""]
+# Preenchimento forçado para evitar que o Google Sheets corte colunas vazias
+linhas_lanc = []
+linhas_cart = []
+for linha in dados_brutos[1:]:
+    linha_completa = linha + [""] * (19 - len(linha)) # Garante que a linha sempre terá 19 colunas
+    if linha_completa[0] != "": linhas_lanc.append(linha_completa[:8])
+    if linha_completa[9] != "": linhas_cart.append(linha_completa[9:19])
 
 df_lanc = pd.DataFrame(linhas_lanc, columns=cabecalhos_lanc)
 df_cart = pd.DataFrame(linhas_cart, columns=cabecalhos_cart)
 
+# Função para traduzir a formatação do Brasil para o Python
+def converter_moeda(val):
+    if pd.isna(val) or val == "": return None
+    v = str(val).replace('R$', '').replace(' ', '')
+    if ',' in v and '.' in v:
+        v = v.replace('.', '').replace(',', '.') if v.rfind(',') > v.rfind('.') else v.replace(',', '')
+    elif ',' in v:
+        v = v.replace(',', '.')
+    return v
+
 if not df_lanc.empty:
     df_lanc['Data'] = pd.to_datetime(df_lanc['Data'], format="%d/%m/%Y", errors='coerce')
-    df_lanc['Valor'] = pd.to_numeric(df_lanc['Valor'], errors='coerce')
+    df_lanc['Valor'] = pd.to_numeric(df_lanc['Valor'].apply(converter_moeda), errors='coerce')
 
 if not df_cart.empty:
     df_cart['Data da Compra'] = pd.to_datetime(df_cart['Data da Compra'], format="%d/%m/%Y", errors='coerce')
     df_cart['Data de Vencimento'] = pd.to_datetime(df_cart['Data de Vencimento'], format="%d/%m/%Y", errors='coerce')
-    df_cart['Valor Total'] = pd.to_numeric(df_cart['Valor Total'], errors='coerce')
-    df_cart['Valor da Parcela'] = pd.to_numeric(df_cart['Valor da Parcela'], errors='coerce')
+    df_cart['Valor Total'] = pd.to_numeric(df_cart['Valor Total'].apply(converter_moeda), errors='coerce')
+    df_cart['Valor da Parcela'] = pd.to_numeric(df_cart['Valor da Parcela'].apply(converter_moeda), errors='coerce')
     df_cart['Parcelas'] = pd.to_numeric(df_cart['Parcelas'], errors='coerce')
     df_cart['Parcela Atual'] = pd.to_numeric(df_cart['Parcela Atual'], errors='coerce')
 
@@ -82,19 +96,14 @@ if 'vencimentos_cartoes' not in st.session_state:
 def salvar_no_sheets():
     df_l = st.session_state.lancamentos.copy()
     if not df_l.empty:
-        df_l['Data'] = pd.to_datetime(df_l['Data'], errors='coerce') 
-        df_l['Data'] = df_l['Data'].dt.strftime('%d/%m/%Y')
-    
+        df_l['Data'] = pd.to_datetime(df_l['Data'], errors='coerce').dt.strftime('%d/%m/%Y')
     df_l = df_l.fillna("")
     valores_l = [cabecalhos_lanc] + df_l.values.tolist()
     
     df_c = st.session_state.cartoes.copy()
     if not df_c.empty:
-        df_c['Data da Compra'] = pd.to_datetime(df_c['Data da Compra'], errors='coerce')
-        df_c['Data de Vencimento'] = pd.to_datetime(df_c['Data de Vencimento'], errors='coerce')
-        df_c['Data da Compra'] = df_c['Data da Compra'].dt.strftime('%d/%m/%Y')
-        df_c['Data de Vencimento'] = df_c['Data de Vencimento'].dt.strftime('%d/%m/%Y')
-    
+        df_c['Data da Compra'] = pd.to_datetime(df_c['Data da Compra'], errors='coerce').dt.strftime('%d/%m/%Y')
+        df_c['Data de Vencimento'] = pd.to_datetime(df_c['Data de Vencimento'], errors='coerce').dt.strftime('%d/%m/%Y')
     df_c = df_c.fillna("")
     valores_c = [cabecalhos_cart] + df_c.values.tolist()
     
