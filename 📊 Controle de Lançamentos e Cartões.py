@@ -77,26 +77,42 @@ if 'vencimentos_cartoes' not in st.session_state:
 
 def salvar_no_sheets():
     """Função para reescrever os dados atualizados na aba do cliente"""
-    # Prepara Lançamentos
+    # ==========================================
+    # 1. PREPARAÇÃO DOS LANÇAMENTOS GERAIS
+    # ==========================================
     df_l = st.session_state.lancamentos.copy()
     if not df_l.empty:
-        # Força a conversão para Data do Pandas antes de formatar
+        # Formata as datas
         df_l['Data'] = pd.to_datetime(df_l['Data'], errors='coerce') 
-        df_l['Data'] = df_l['Data'].dt.strftime('%d/%m/%Y').fillna('')
+        df_l['Data'] = df_l['Data'].dt.strftime('%d/%m/%Y')
+    
+    # A SOLUÇÃO: Substitui qualquer tipo de vazio (NaN, None, NaT, pd.NA) por texto em branco ("")
+    # em TODAS as colunas da tabela de uma só vez. Isso impede o erro de JSON.
+    df_l = df_l.fillna("")
+    
     valores_l = [cabecalhos_lanc] + df_l.values.tolist()
     
-    # Prepara Cartões
+    # ==========================================
+    # 2. PREPARAÇÃO DOS CARTÕES
+    # ==========================================
     df_c = st.session_state.cartoes.copy()
     if not df_c.empty:
-        # Força a conversão para Data do Pandas antes de formatar
+        # Formata as datas
         df_c['Data da Compra'] = pd.to_datetime(df_c['Data da Compra'], errors='coerce')
         df_c['Data de Vencimento'] = pd.to_datetime(df_c['Data de Vencimento'], errors='coerce')
         
-        df_c['Data da Compra'] = df_c['Data da Compra'].dt.strftime('%d/%m/%Y').fillna('')
-        df_c['Data de Vencimento'] = df_c['Data de Vencimento'].dt.strftime('%d/%m/%Y').fillna('')
+        df_c['Data da Compra'] = df_c['Data da Compra'].dt.strftime('%d/%m/%Y')
+        df_c['Data de Vencimento'] = df_c['Data de Vencimento'].dt.strftime('%d/%m/%Y')
+    
+    # A SOLUÇÃO APLICADA AOS CARTÕES
+    df_c = df_c.fillna("")
+    
     valores_c = [cabecalhos_cart] + df_c.values.tolist()
     
-    # Limpa a aba e reescreve para evitar linhas fantasmas
+    # ==========================================
+    # 3. ENVIO PARA O GOOGLE SHEETS
+    # ==========================================
+    # Limpa a aba e reescreve 
     aba_atual.clear()
     aba_atual.update(range_name='A1', values=valores_l)
     aba_atual.update(range_name='J1', values=valores_c)
