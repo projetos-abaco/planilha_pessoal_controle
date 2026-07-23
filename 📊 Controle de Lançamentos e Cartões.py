@@ -122,7 +122,7 @@ aba1, aba2 = st.tabs(["📝 Novo Lançamento", "💳 Cartão de Crédito"])
 
 with aba1:
     st.header(f"Lançamento Geral - {cliente_selecionado}")
-    data_lanc = st.date_input("Data", date.today(), format="DD/MM/YYYY")
+    data_lanc = st.date_input("Data Inicial", date.today(), format="DD/MM/YYYY")
     tipo = st.selectbox("Tipo", ["Receita", "Despesa"])
     
     if tipo == "Receita":
@@ -136,19 +136,42 @@ with aba1:
     conta = st.selectbox("Conta/Banco", ["Banco do Brasil", "Santander", "Nubank", "Inter", "Dinheiro Físico"])
     metodo_pagamento = st.selectbox("Método de Pagamento", ["Pix", "Débito", "Boleto"])
     valor = st.number_input("Valor (R$)", min_value=0.01, format="%.2f")
-    descricao = st.text_input("Descrição (Ex: Salário, Conta de Luz)")
+    descricao = st.text_input("Descrição (Ex: Salário, Conta de Luz, Aluguel)")
+    
+    # --- NOVO CAMPO: RECORRÊNCIA ---
+    recorrencia = st.number_input(
+        "Repetir lançamento por quantos meses?", 
+        min_value=1, max_value=120, value=1, step=1,
+        help="Use 1 para lançamento único. Se preencher '12', o sistema lançará a conta neste mês e nos 11 meses seguintes."
+    )
+    
     status = st.radio("Status", opcoes_status, horizontal=True)
         
     if st.button("Salvar Lançamento no Sistema"):
         valor_final = valor if tipo == "Receita" else -valor
-        novo_dado = pd.DataFrame([{
-            'Data': pd.to_datetime(data_lanc), 'Tipo': tipo, 'Categoria': categoria,
-            'Conta/Banco': conta, 'Método de Pagamento': metodo_pagamento,
-            'Valor': valor_final, 'Descrição': descricao, 'Status': status
-        }])
-        st.session_state.lancamentos = pd.concat([st.session_state.lancamentos, novo_dado], ignore_index=True)
+        linhas_novas = []
+        
+        # Lógica para criar várias linhas avançando os meses
+        for i in range(recorrencia):
+            mes_alvo = data_lanc.month - 1 + i
+            ano_novo = data_lanc.year + (mes_alvo // 12)
+            mes_novo = (mes_alvo % 12) + 1
+            dia_novo = min(data_lanc.day, calendar.monthrange(ano_novo, mes_novo)[1])
+            data_parcela = date(ano_novo, mes_novo, dia_novo)
+            
+            linhas_novas.append({
+                'Data': pd.to_datetime(data_parcela), 'Tipo': tipo, 'Categoria': categoria,
+                'Conta/Banco': conta, 'Método de Pagamento': metodo_pagamento,
+                'Valor': valor_final, 'Descrição': descricao, 'Status': status
+            })
+            
+        st.session_state.lancamentos = pd.concat([st.session_state.lancamentos, pd.DataFrame(linhas_novas)], ignore_index=True)
         salvar_no_sheets()
-        st.success("Sincronizado com o Google Sheets com sucesso!")
+        
+        if recorrencia > 1:
+            st.success(f"Lançamento registrado para {recorrencia} meses consecutivos com sucesso!")
+        else:
+            st.success("Sincronizado com o Google Sheets com sucesso!")
         st.rerun()
 
     st.subheader("Histórico (Sincronizado)")
