@@ -158,7 +158,6 @@ with col_fluxo1:
                 df_fluxo = df_fluxo.sort_values('Ordenação')
             x_col = 'Mes_Ano' if 'Mes_Ano' in df_fluxo.columns else 'Tipo'
             
-            # Adicionado o título no gráfico de barras
             fig_fluxo = px.bar(
                 df_fluxo, x=x_col, y='Valor', color='Tipo', barmode='group', text_auto=',.2f', 
                 color_discrete_map={'Receita': '#2ca02c', 'Despesa': '#ff7f0e', 'Cartão (Pago)': '#1f77b4', 'Cartão (A Pagar)': '#d62728'},
@@ -181,10 +180,13 @@ with col_fluxo2:
     if frames_cat:
         df_cat_agrupado = pd.concat(frames_cat).groupby('Categoria')['Valor'].sum().reset_index()
         
-        # Adicionado o título explicativo no gráfico de pizza
+        # --- NOVA PALETA DE CORES (Tons naturais e quentes) ---
+        paleta_despesas = ['#ff7f0e', '#ff9d3b', '#ffba6b', '#ffd699', '#e66300', '#cc5800', '#ffa34d', '#ff8c1c']
+        
         fig1 = px.pie(
             df_cat_agrupado, values='Valor', names='Categoria', hole=0.3,
-            title=f"Classificação das Despesas Consolidadas"
+            title=f"Classificação das Despesas Consolidadas",
+            color_discrete_sequence=paleta_despesas
         )
         fig1.update_traces(textposition='inside', textinfo='percent+label')
         fig1.update_layout(separators=".,")
