@@ -157,7 +157,13 @@ with col_fluxo1:
                 df_fluxo['Ordenação'] = pd.to_datetime(df_fluxo['Mes_Ano'], format='%m/%Y')
                 df_fluxo = df_fluxo.sort_values('Ordenação')
             x_col = 'Mes_Ano' if 'Mes_Ano' in df_fluxo.columns else 'Tipo'
-            fig_fluxo = px.bar(df_fluxo, x=x_col, y='Valor', color='Tipo', barmode='group', text_auto=',.2f', color_discrete_map={'Receita': '#2ca02c', 'Despesa': '#ff7f0e', 'Cartão (Pago)': '#1f77b4', 'Cartão (A Pagar)': '#d62728'})
+            
+            # Adicionado o título no gráfico de barras
+            fig_fluxo = px.bar(
+                df_fluxo, x=x_col, y='Valor', color='Tipo', barmode='group', text_auto=',.2f', 
+                color_discrete_map={'Receita': '#2ca02c', 'Despesa': '#ff7f0e', 'Cartão (Pago)': '#1f77b4', 'Cartão (A Pagar)': '#d62728'},
+                title=f"Comparativo de Entradas e Saídas"
+            )
             fig_fluxo.update_traces(textposition='outside', texttemplate='R$ %{y:,.2f}')
             fig_fluxo.update_layout(separators=".,")
             st.plotly_chart(fig_fluxo, use_container_width=True)
@@ -174,7 +180,12 @@ with col_fluxo2:
         frames_cat.append(df_c_cat)
     if frames_cat:
         df_cat_agrupado = pd.concat(frames_cat).groupby('Categoria')['Valor'].sum().reset_index()
-        fig1 = px.pie(df_cat_agrupado, values='Valor', names='Categoria', hole=0.3)
+        
+        # Adicionado o título explicativo no gráfico de pizza
+        fig1 = px.pie(
+            df_cat_agrupado, values='Valor', names='Categoria', hole=0.3,
+            title=f"Classificação das Despesas Consolidadas"
+        )
         fig1.update_traces(textposition='inside', textinfo='percent+label')
         fig1.update_layout(separators=".,")
         st.plotly_chart(fig1, use_container_width=True)
