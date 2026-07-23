@@ -102,14 +102,13 @@ with col2:
 
 st.markdown("---")
 
-# --- NOVO MÓDULO: AUDITORIA INSS (IN 138/2022) ---
+# --- MÓDULO: AUDITORIA INSS (IN 138/2022) REFINADO ---
 st.subheader("🔎 Auditoria de Margem Consignável (INSS IN 138/2022)")
 st.markdown("Verificação de abusividade de crédito descontado em folha, limite de linhas e teto de comprometimento.")
 
 col_in1, col_in2 = st.columns([1, 2])
 with col_in1:
     tipo_beneficio = st.radio("Tipo de Benefício:", ["Aposentado/Pensionista RGPS (Teto 45%)", "BPC/LOAS ou RMV (Teto 35%)"])
-    # O valor padrão é a receita lançada na planilha, mas o usuário pode editar na tela.
     renda_bruta_inss = st.number_input("Renda Bruta do Benefício (R$)", value=float(total_receitas), step=100.0)
     descontos_inss = st.number_input("Descontos Obrigatórios (IRPF, etc.)", value=0.0)
     base_calculo_inss = renda_bruta_inss - descontos_inss
@@ -117,43 +116,51 @@ with col_in1:
 with col_in2:
     is_bpc = "BPC" in tipo_beneficio
     teto_emp = 0.30 if is_bpc else 0.35
-    teto_cartao = 0.05 if is_bpc else 0.10 # BPC = 5% (um cartão). RGPS = 5% RMC + 5% RCC.
+    teto_cartao_individual = 0.05 # Sempre 5% por modalidade (RMC / RCC)
     
     gastos_emp = df_despesas[df_despesas['Categoria'] == 'Empréstimo Consignado INSS']['Valor'].abs().sum() if not df_despesas.empty else 0
     gastos_rmc = df_despesas[df_despesas['Categoria'] == 'Cartão de Crédito Consignado (RMC)']['Valor'].abs().sum() if not df_despesas.empty else 0
     gastos_rcc = df_despesas[df_despesas['Categoria'] == 'Cartão de Benefício Consignado (RCC)']['Valor'].abs().sum() if not df_despesas.empty else 0
-    gastos_cartoes_consig = gastos_rmc + gastos_rcc
     
-    # Nova Lógica de Exibição Inteligente
     if base_calculo_inss <= 0:
-        if gastos_emp > 0 or gastos_cartoes_consig > 0:
+        if gastos_emp > 0 or gastos_rmc > 0 or gastos_rcc > 0:
             st.warning("⚠️ **Identificamos descontos consignados na planilha!** Para rodar a auditoria de abusividade, digite a Renda Bruta do Benefício no campo ao lado.")
         else:
             st.info("Informe a Renda Bruta do Benefício ao lado para simular o limite consignável do cliente.")
     else:
         limite_emp_reais = base_calculo_inss * teto_emp
-        limite_cartao_reais = base_calculo_inss * teto_cartao
+        limite_cartao_reais = base_calculo_inss * teto_cartao_individual
         
         st.markdown(f"**Base de Cálculo Líquida:** R$ {formatar_br(base_calculo_inss)}")
         
-        # Auditoria Empréstimo Pessoal
+        # 1. Auditoria Empréstimo Pessoal (30% ou 35%)
         if gastos_emp > limite_emp_reais:
-            st.error(f"🚨 **ABUSIVIDADE DETECTADA (Empréstimo Pessoal):** O banco está descontando R$ {formatar_br(gastos_emp)}, mas a Lei limita a R$ {formatar_br(limite_emp_reais)} ({int(teto_emp*100)}%). Indício de crédito abusivo.")
+            st.error(f"🚨 **ABUSIVIDADE (Empréstimo Pessoal):** Desconto de R$ {formatar_br(gastos_emp)}. A Lei limita a R$ {formatar_br(limite_emp_reais)} ({int(teto_emp*100)}%).")
         elif gastos_emp > 0:
             st.success(f"✅ **Empréstimo Pessoal:** Dentro da margem legal de {int(teto_emp*100)}% (Gasto: R$ {formatar_br(gastos_emp)} | Limite: R$ {formatar_br(limite_emp_reais)})")
         else:
             st.info(f"⚪ **Empréstimo Pessoal:** Nenhum desconto registrado. (Limite disponível: R$ {formatar_br(limite_emp_reais)})")
             
-        # Auditoria Cartões (RMC / RCC)
-        if gastos_cartoes_consig > limite_cartao_reais or (is_bpc and gastos_rmc > 0 and gastos_rcc > 0):
-            motivo = "O cliente possui as duas modalidades ativas, sendo permitido apenas UMA para BPC" if (is_bpc and gastos_rmc > 0 and gastos_rcc > 0) else f"O desconto ultrapassa o teto legal de {int(teto_cartao*100)}%"
-            st.error(f"🚨 **ABUSIVIDADE DETECTADA (Cartões Consignados):** {motivo}. (Gasto: R$ {formatar_br(gastos_cartoes_consig)} | Limite: R$ {formatar_br(limite_cartao_reais)})")
-        elif gastos_cartoes_consig > 0:
-            st.success(f"✅ **Cartões Consignados:** Dentro das normativas (Gasto: R$ {formatar_br(gastos_cartoes_consig)} | Limite Global: R$ {formatar_br(limite_cartao_reais)})")
-        else:
-            st.info(f"⚪ **Cartões Consignados:** Nenhum desconto registrado. (Limite disponível: R$ {formatar_br(limite_cartao_reais)})")
+        # 2. Auditoria Cartão de Crédito Consignado (RMC - 5%)
+        if gastos_rmc > limite_cartao_reais:
+            st.error(f"🚨 **ABUSIVIDADE (Cartão RMC):** Desconto de R$ {formatar_br(gastos_rmc)}. A Lei limita a R$ {formatar_br(limite_cartao_reais)} (5%).")
+        elif gastos_rmc > 0:
+            st.success(f"✅ **Cartão de Crédito (RMC):** Dentro da margem legal de 5% (Gasto: R$ {formatar_br(gastos_rmc)} | Limite: R$ {formatar_br(limite_cartao_reais)})")
             
-        st.caption("💡 *Nota Legal (IN 138/2022): O INSS limita a 13 contratos simultâneos de empréstimo pessoal e o prazo de parcelamento em até 84 meses. Benefícios novos ficam bloqueados nos primeiros 90 dias.*")
+        # 3. Auditoria Cartão de Benefício (RCC - 5%)
+        if gastos_rcc > limite_cartao_reais:
+            st.error(f"🚨 **ABUSIVIDADE (Cartão RCC):** Desconto de R$ {formatar_br(gastos_rcc)}. A Lei limita a R$ {formatar_br(limite_cartao_reais)} (5%).")
+        elif gastos_rcc > 0:
+            st.success(f"✅ **Cartão de Benefício (RCC):** Dentro da margem legal de 5% (Gasto: R$ {formatar_br(gastos_rcc)} | Limite: R$ {formatar_br(limite_cartao_reais)})")
+            
+        # 4. Auditoria Exclusiva do BPC/LOAS (Bloqueio de Duas Modalidades de Cartão)
+        if is_bpc and gastos_rmc > 0 and gastos_rcc > 0:
+            st.error(f"🚨 **ABUSIVIDADE (Acúmulo Ilegal BPC):** Beneficiários do BPC/LOAS possuem margem restrita de 5% e só podem contratar **UMA** modalidade de cartão. O banco ativou RMC e RCC simultaneamente.")
+        
+        if gastos_rmc == 0 and gastos_rcc == 0:
+            st.info(f"⚪ **Cartões Consignados:** Nenhum desconto de RMC ou RCC registrado. (Limite disponível: R$ {formatar_br(limite_cartao_reais)} por modalidade elegível).")
+            
+        st.caption("💡 *Nota Legal (IN 138/2022): O INSS limita a 13 contratos simultâneos de empréstimo e parcelamento máximo de 84 meses.*")
 
 st.markdown("---")
 st.subheader("🤝 Simulador de Plano de Pagamento (Dívidas Negociáveis)")
