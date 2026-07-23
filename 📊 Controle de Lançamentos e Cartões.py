@@ -138,20 +138,18 @@ with aba1:
     valor = st.number_input("Valor (R$)", min_value=0.01, format="%.2f")
     descricao = st.text_input("Descrição (Ex: Salário, Conta de Luz, Aluguel)")
     
-    # --- NOVO CAMPO: RECORRÊNCIA ---
     recorrencia = st.number_input(
         "Repetir lançamento por quantos meses?", 
         min_value=1, max_value=120, value=1, step=1,
         help="Use 1 para lançamento único. Se preencher '12', o sistema lançará a conta neste mês e nos 11 meses seguintes."
     )
     
-    status = st.radio("Status", opcoes_status, horizontal=True)
+    status = st.radio("Status Inicial (Mês Atual)", opcoes_status, horizontal=True)
         
     if st.button("Salvar Lançamento no Sistema"):
         valor_final = valor if tipo == "Receita" else -valor
         linhas_novas = []
         
-        # Lógica para criar várias linhas avançando os meses
         for i in range(recorrencia):
             mes_alvo = data_lanc.month - 1 + i
             ano_novo = data_lanc.year + (mes_alvo // 12)
@@ -159,17 +157,24 @@ with aba1:
             dia_novo = min(data_lanc.day, calendar.monthrange(ano_novo, mes_novo)[1])
             data_parcela = date(ano_novo, mes_novo, dia_novo)
             
+            # --- LÓGICA INTELIGENTE DE STATUS ---
+            if i == 0:
+                status_atual = status # O primeiro mês pega exatamente o que o usuário marcou na tela
+            else:
+                # Do segundo mês em diante, vira obrigatoriamente "A Receber" ou "A Pagar"
+                status_atual = "A Receber" if tipo == "Receita" else "A Pagar"
+            
             linhas_novas.append({
                 'Data': pd.to_datetime(data_parcela), 'Tipo': tipo, 'Categoria': categoria,
                 'Conta/Banco': conta, 'Método de Pagamento': metodo_pagamento,
-                'Valor': valor_final, 'Descrição': descricao, 'Status': status
+                'Valor': valor_final, 'Descrição': descricao, 'Status': status_atual
             })
             
         st.session_state.lancamentos = pd.concat([st.session_state.lancamentos, pd.DataFrame(linhas_novas)], ignore_index=True)
         salvar_no_sheets()
         
         if recorrencia > 1:
-            st.success(f"Lançamento registrado para {recorrencia} meses consecutivos com sucesso!")
+            st.success(f"Lançamento registrado para {recorrencia} meses consecutivos com sucesso! (Os meses futuros foram marcados como pendentes automaticamente).")
         else:
             st.success("Sincronizado com o Google Sheets com sucesso!")
         st.rerun()
