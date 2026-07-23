@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
 from datetime import date
 import gspread
@@ -114,6 +115,40 @@ with col2:
     st.plotly_chart(fig_cascata, use_container_width=True)
 
 st.markdown("---")
+
+# --- NOVO GRÁFICO: CURVA DE AMORTIZAÇÃO ---
+st.subheader("📉 Curva de Amortização (Projeção Futura)")
+st.markdown("Visão do volume de dívidas a vencer ao longo do tempo. Uma curva decrescente comprova a boa-fé de que o cliente cessou o endividamento e está apenas sofrendo com o passivo acumulado.")
+
+if not df_cart.empty:
+    df_futuro = df_cart[df_cart['Status'] == 'A Pagar'].copy()
+    if not df_futuro.empty:
+        df_futuro['Ordenacao'] = pd.to_datetime(df_futuro['Data de Vencimento'])
+        df_agrupado = df_futuro.sort_values('Ordenacao').groupby('Mes_Ano', sort=False)['Valor da Parcela'].sum().reset_index()
+        
+        fig_evolucao = px.area(
+            df_agrupado, x='Mes_Ano', y='Valor da Parcela', 
+            markers=True, color_discrete_sequence=['#d62728']
+        )
+        # Formatação para aplicar o padrão monetário no gráfico
+        fig_evolucao.update_traces(
+            text=df_agrupado['Valor da Parcela'].apply(lambda x: f'R$ {formatar_br(x)}'), 
+            textposition='top center'
+        )
+        fig_evolucao.update_layout(
+            separators=".,", 
+            yaxis_title="Valor das Faturas Pendentes (R$)", 
+            xaxis_title="Mês de Vencimento",
+            margin=dict(t=30, b=20)
+        )
+        st.plotly_chart(fig_evolucao, use_container_width=True)
+    else:
+        st.success("Não há faturas futuras pendentes para desenhar a curva.")
+else:
+    st.info("Nenhum dado de cartão registrado.")
+
+st.markdown("---")
+
 st.subheader("🤝 Simulador de Plano de Pagamento (Art. 104-A, Lei 14.181/21)")
 divida_global = df_cart[df_cart['Status'] == 'A Pagar']['Valor da Parcela'].sum() if not df_cart.empty else 0
 st.metric("Dívida Global Acumulada (Principal)", f"R$ {formatar_br(divida_global)}")
