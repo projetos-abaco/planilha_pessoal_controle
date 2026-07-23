@@ -59,14 +59,13 @@ if not dados_brutos:
 linhas_lanc = []
 linhas_cart = []
 for linha in dados_brutos[1:]:
-    linha_completa = linha + [""] * (19 - len(linha)) # Garante que a linha sempre terá 19 colunas
+    linha_completa = linha + [""] * (19 - len(linha)) 
     if linha_completa[0] != "": linhas_lanc.append(linha_completa[:8])
     if linha_completa[9] != "": linhas_cart.append(linha_completa[9:19])
 
 df_lanc = pd.DataFrame(linhas_lanc, columns=cabecalhos_lanc)
 df_cart = pd.DataFrame(linhas_cart, columns=cabecalhos_cart)
 
-# Função para traduzir a formatação do Brasil para o Python
 def converter_moeda(val):
     if pd.isna(val) or val == "": return None
     v = str(val).replace('R$', '').replace(' ', '')
@@ -159,7 +158,8 @@ with aba1:
         st.session_state.lancamentos, use_container_width=True, hide_index=True, num_rows="dynamic", 
         column_config={
             "Status": st.column_config.SelectboxColumn("Status", options=["Pago", "A Pagar", "Recebido", "A Receber"], required=True),
-            "Data": st.column_config.DateColumn("Data", format="DD/MM/YYYY")
+            "Data": st.column_config.DateColumn("Data", format="DD/MM/YYYY"),
+            "Valor": st.column_config.NumberColumn("Valor", format="R$ %.2f")
         }, key="ed_lanc"
     )
     if not st.session_state.lancamentos.equals(df_lanc_editado):
@@ -231,7 +231,9 @@ with aba2:
         column_config={
             "Status": st.column_config.SelectboxColumn("Status", options=["Pago", "A Pagar"], required=True),
             "Data da Compra": st.column_config.DateColumn("Compra", format="DD/MM/YYYY"),
-            "Data de Vencimento": st.column_config.DateColumn("Vencimento", format="DD/MM/YYYY")
+            "Data de Vencimento": st.column_config.DateColumn("Vencimento", format="DD/MM/YYYY"),
+            "Valor Total": st.column_config.NumberColumn("Valor Total", format="R$ %.2f"),
+            "Valor da Parcela": st.column_config.NumberColumn("Valor da Parcela", format="R$ %.2f")
         }, key="ed_cart"
     )
     if not st.session_state.cartoes.equals(df_cartoes_editado):

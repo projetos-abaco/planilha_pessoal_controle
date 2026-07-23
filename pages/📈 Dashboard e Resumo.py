@@ -8,6 +8,10 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="Dashboard Financeiro", page_icon="📈", layout="wide")
 
+# Função para formatar os valores no padrão brasileiro (R$ 2.000,00)
+def formatar_br(valor):
+    return f"{valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+
 @st.cache_resource
 def conectar_google_sheets():
     try:
@@ -92,11 +96,11 @@ total_saidas = total_despesas_gerais + total_fatura_mes
 taxa_comprometimento = (total_saidas / total_receitas) * 100 if total_receitas > 0 else (100.0 if total_saidas > 0 else 0.0)
 
 c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("Receitas do Período", f"R$ {total_receitas:,.2f}")
-c2.metric("Despesas Gerais", f"R$ {total_despesas_gerais:,.2f}")
-c3.metric("Faturas de Cartão", f"R$ {total_fatura_mes:,.2f}", f"Pago: R$ {faturas_pagas:,.2f}", delta_color="off")
-c4.metric("Saldo Líquido", f"R$ {saldo_conta:,.2f}")
-c5.metric("Renda Comprometida", f"{taxa_comprometimento:.1f}%")
+c1.metric("Receitas do Período", f"R$ {formatar_br(total_receitas)}")
+c2.metric("Despesas Gerais", f"R$ {formatar_br(total_despesas_gerais)}")
+c3.metric("Faturas de Cartão", f"R$ {formatar_br(total_fatura_mes)}", f"Pago: R$ {formatar_br(faturas_pagas)}", delta_color="off")
+c4.metric("Saldo Líquido", f"R$ {formatar_br(saldo_conta)}")
+c5.metric("Renda Comprometida", f"{formatar_br(taxa_comprometimento).replace(',00', '')}%")
 
 st.markdown("---")
 
@@ -113,9 +117,10 @@ if filtro_mes_global == "Visão Geral (Todos os Meses)":
         df_comp['Ordenação'] = pd.to_datetime(df_comp['Mes_Ano'], format='%m/%Y')
         df_comp = df_comp.sort_values('Ordenação')
         fig_comp = px.line(df_comp, x='Mes_Ano', y='Comprometimento (%)', markers=True, title="Evolução do Comprometimento")
-        fig_comp.update_traces(text=df_comp['Comprometimento (%)'].apply(lambda x: f'{x:.1f}%'), textposition="top center", line=dict(color='#d62728', width=3), marker=dict(size=8))
+        fig_comp.update_traces(text=df_comp['Comprometimento (%)'].apply(lambda x: f'{formatar_br(x).replace(",00","")}%'), textposition="top center", line=dict(color='#d62728', width=3), marker=dict(size=8))
         fig_comp.add_hline(y=100, line_dash="dash", line_color="black", annotation_text="100%")
         fig_comp.update_yaxes(range=[0, max(120, df_comp['Comprometimento (%)'].max() + 10)])
+        fig_comp.update_layout(separators=".,")
         st.plotly_chart(fig_comp, use_container_width=True)
 else:
     cor_velocimetro = "#d62728" if taxa_comprometimento > 80 else ("#ff7f0e" if taxa_comprometimento > 50 else "#2ca02c")
@@ -126,7 +131,7 @@ else:
                'steps': [{'range': [0, 50], 'color': 'rgba(44, 160, 44, 0.2)'}, {'range': [50, 80], 'color': 'rgba(255, 127, 14, 0.2)'}, {'range': [80, 100], 'color': 'rgba(214, 39, 40, 0.2)'}], 
                'threshold': {'line': {'color': "black", 'width': 4}, 'thickness': 0.75, 'value': 100}}
     ))
-    fig_gauge.update_layout(height=400, margin=dict(l=20, r=20, t=50, b=20))
+    fig_gauge.update_layout(height=400, margin=dict(l=20, r=20, t=50, b=20), separators=".,")
     st.plotly_chart(fig_gauge, use_container_width=True)
 
 st.markdown("---")
@@ -152,8 +157,9 @@ with col_fluxo1:
                 df_fluxo['Ordenação'] = pd.to_datetime(df_fluxo['Mes_Ano'], format='%m/%Y')
                 df_fluxo = df_fluxo.sort_values('Ordenação')
             x_col = 'Mes_Ano' if 'Mes_Ano' in df_fluxo.columns else 'Tipo'
-            fig_fluxo = px.bar(df_fluxo, x=x_col, y='Valor', color='Tipo', barmode='group', text_auto='.2f', color_discrete_map={'Receita': '#2ca02c', 'Despesa': '#ff7f0e', 'Cartão (Pago)': '#1f77b4', 'Cartão (A Pagar)': '#d62728'})
-            fig_fluxo.update_traces(textposition='outside')
+            fig_fluxo = px.bar(df_fluxo, x=x_col, y='Valor', color='Tipo', barmode='group', text_auto=',.2f', color_discrete_map={'Receita': '#2ca02c', 'Despesa': '#ff7f0e', 'Cartão (Pago)': '#1f77b4', 'Cartão (A Pagar)': '#d62728'})
+            fig_fluxo.update_traces(textposition='outside', texttemplate='R$ %{y:,.2f}')
+            fig_fluxo.update_layout(separators=".,")
             st.plotly_chart(fig_fluxo, use_container_width=True)
 
 with col_fluxo2:
@@ -170,6 +176,7 @@ with col_fluxo2:
         df_cat_agrupado = pd.concat(frames_cat).groupby('Categoria')['Valor'].sum().reset_index()
         fig1 = px.pie(df_cat_agrupado, values='Valor', names='Categoria', hole=0.3)
         fig1.update_traces(textposition='inside', textinfo='percent+label')
+        fig1.update_layout(separators=".,")
         st.plotly_chart(fig1, use_container_width=True)
     else: st.info("Nenhuma despesa registrada neste período.")
 
@@ -191,12 +198,14 @@ if not df_cart.empty:
                 df_prev_agrup = df_previsao.sort_values('Data de Vencimento').groupby('Mes_Ano', sort=False)['Valor da Parcela'].sum().reset_index()
                 fig_prev = px.bar(df_prev_agrup, x='Mes_Ano', y='Valor da Parcela', text='Valor da Parcela', title=f"Faturas ({filtro_cartao})", color_discrete_sequence=['#d62728'])
                 fig_prev.update_traces(texttemplate='R$ %{text:,.2f}', textposition='outside')
+                fig_prev.update_layout(separators=".,")
                 st.plotly_chart(fig_prev, use_container_width=True)
             else: st.info("Nenhuma fatura pendente.")
         with col_g2:
             if not df_previsao.empty:
                 fig2 = px.bar(df_previsao.groupby('Cartão')['Valor da Parcela'].sum().reset_index(), x='Cartão', y='Valor da Parcela', text='Valor da Parcela', color='Cartão', title="Dívida Restante no Período")
                 fig2.update_traces(texttemplate='R$ %{text:,.2f}', textposition='outside')
+                fig2.update_layout(separators=".,")
                 st.plotly_chart(fig2, use_container_width=True)
     else: st.success("Todas as faturas estão pagas!")
 else: st.info("Nenhuma compra registrada.")

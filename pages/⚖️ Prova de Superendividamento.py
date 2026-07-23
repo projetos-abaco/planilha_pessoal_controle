@@ -7,6 +7,10 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="Prova de Superendividamento", page_icon="⚖️", layout="wide")
 
+# Função para formatar os valores no padrão brasileiro (R$ 2.000,00)
+def formatar_br(valor):
+    return f"{valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+
 @st.cache_resource
 def conectar_google_sheets():
     try:
@@ -102,17 +106,17 @@ with col2:
         name="Auditoria", orientation="v", measure=["relative", "relative", "total", "relative", "total"],
         x=["Renda Total", "Mínimo Existencial", "Margem p/ Negociação", "Dívida (Cartões)", "Situação Real"],
         textposition="outside",
-        text=[f"R$ {total_receitas:,.2f}", f"-R$ {minimo_existencial:,.2f}", f"R$ {margem_repactuacao:,.2f}", f"-R$ {total_fatura_mes:,.2f}", f"R$ {saldo_final_juiz:,.2f}"],
+        text=[f"R$ {formatar_br(total_receitas)}", f"-R$ {formatar_br(minimo_existencial)}", f"R$ {formatar_br(margem_repactuacao)}", f"-R$ {formatar_br(total_fatura_mes)}", f"R$ {formatar_br(saldo_final_juiz)}"],
         y=[total_receitas, -minimo_existencial, margem_repactuacao, -total_fatura_mes, saldo_final_juiz],
         connector={"line": {"color": "rgba(63, 63, 63, 0.5)", "width": 2}}, decreasing={"marker": {"color": "#d62728"}}, increasing={"marker": {"color": "#2ca02c"}}, totals={"marker": {"color": "#1f77b4"}}
     ))
-    fig_cascata.update_layout(title=f"Impacto das Dívidas vs. Proteção Existencial ({mes_alvo})", showlegend=False, height=500, margin=dict(t=50, l=20, r=20, b=20))
+    fig_cascata.update_layout(title=f"Impacto das Dívidas vs. Proteção Existencial ({mes_alvo})", showlegend=False, height=500, margin=dict(t=50, l=20, r=20, b=20), separators=".,")
     st.plotly_chart(fig_cascata, use_container_width=True)
 
 st.markdown("---")
 st.subheader("🤝 Simulador de Plano de Pagamento (Art. 104-A, Lei 14.181/21)")
 divida_global = df_cart[df_cart['Status'] == 'A Pagar']['Valor da Parcela'].sum() if not df_cart.empty else 0
-st.metric("Dívida Global Acumulada (Principal)", f"R$ {divida_global:,.2f}")
+st.metric("Dívida Global Acumulada (Principal)", f"R$ {formatar_br(divida_global)}")
 
 if divida_global > 0 and margem_repactuacao > 0:
     col_sim1, col_sim2, col_sim3 = st.columns(3)
@@ -122,10 +126,10 @@ if divida_global > 0 and margem_repactuacao > 0:
         viavel = parcela_proposta <= margem_repactuacao
         with col:
             st.markdown(f"#### Proposta em {prazo} meses")
-            st.markdown(f"**Parcela Simples:** R$ {parcela_proposta:,.2f}")
+            st.markdown(f"**Parcela Simples:** R$ {formatar_br(parcela_proposta)}")
             if viavel:
-                st.success(f"✅ **Viável**\nA parcela cabe na Margem de R$ {margem_repactuacao:,.2f}.\n\n*Folga no orçamento: R$ {margem_repactuacao - parcela_proposta:,.2f}*")
+                st.success(f"✅ **Viável**\nA parcela cabe na Margem de R$ {formatar_br(margem_repactuacao)}.\n\n*Folga no orçamento: R$ {formatar_br(margem_repactuacao - parcela_proposta)}*")
             else:
-                st.error(f"❌ **Inviável**\nA parcela ultrapassa a Margem de R$ {margem_repactuacao:,.2f}.\n\n*Déficit contínuo: R$ {parcela_proposta - margem_repactuacao:,.2f}*")
-elif divida_global > 0 and margem_repactuacao <= 0: st.error(f"⚠️ O cliente não possui Margem de Repactuação positiva.")
+                st.error(f"❌ **Inviável**\nA parcela ultrapassa a Margem de R$ {formatar_br(margem_repactuacao)}.\n\n*Déficit contínuo: R$ {formatar_br(parcela_proposta - margem_repactuacao)}*")
+elif divida_global > 0 and margem_repactuacao <= 0: st.error(f"⚠️ O cliente não possui Margem de Repactuação positiva (R$ {formatar_br(margem_repactuacao)}).")
 else: st.info("Não há dívidas pendentes.")
