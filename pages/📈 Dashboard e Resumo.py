@@ -180,8 +180,8 @@ with col_fluxo2:
     if frames_cat:
         df_cat_agrupado = pd.concat(frames_cat).groupby('Categoria')['Valor'].sum().reset_index()
         
-        # --- NOVA PALETA DE CORES (Tons naturais e quentes) ---
-        paleta_despesas = ['#ff7f0e', '#ff9d3b', '#ffba6b', '#ffd699', '#e66300', '#cc5800', '#ffa34d', '#ff8c1c']
+        # --- NOVA PALETA DE CORES (Tons de Azul de alto contraste) ---
+        paleta_despesas = ['#1E3A8A', '#1D4ED8', '#2563EB', '#3B82F6', '#60A5FA', '#0284C7', '#0EA5E9', '#38BDF8']
         
         fig1 = px.pie(
             df_cat_agrupado, values='Valor', names='Categoria', hole=0.3,
